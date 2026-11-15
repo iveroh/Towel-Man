@@ -1,1 +1,2 @@
-# TPD4168-Game-Design
+# game-design
+Game design project
