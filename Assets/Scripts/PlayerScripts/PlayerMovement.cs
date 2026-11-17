@@ -8,52 +8,99 @@ public class PlayerMovement : MonoBehaviour
     public float jumpForce = 7f;
     public float gravityMultiplier = 2f;
     public float groundCheckDistance = 0.15f;
+    public LayerMask groundMask = ~0;
+    public float jumpCooldown = 0.2f;
+    public KeyCode jumpKey = KeyCode.W;
+    public KeyCode jumpKeyAlt = KeyCode.UpArrow;
 
-    [Header("Crouch")]
-    public float crouchHeightMultiplier = 0.5f;
+    // Fired the moment a jump actually starts (used by PlayerAnimation)
+    public System.Action OnJump;
+
+    [Header("Uneven ground")]
+    [Tooltip("Steps and bumps up to this height (in world units) are walked over instead of blocking him")]
+    public float stepHeight = 0.6f;
+    public float stepCheckDistance = 0.12f;
+    [Tooltip("Radius of the rounded feet collider under the body box. Rounded feet slide over the seams between ground tiles instead of catching on them.")]
+    public float footRadius = 0.6f;
 
     private Rigidbody rb;
     private BoxCollider boxCollider;
+    private CapsuleCollider feet;
 
-    private Vector3 originalScale;
-    private Vector3 originalColliderSize;
-    private Vector3 originalColliderCenter;
-
-    private bool isCrouching;
+    private float lastJumpTime = -10f;
 
     void Start()
     {
         rb = GetComponent<Rigidbody>();
         boxCollider = GetComponent<BoxCollider>();
 
-        originalScale = transform.localScale;
-        originalColliderSize = boxCollider.size;
-        originalColliderCenter = boxCollider.center;
+        // no friction, so he never sticks to walls or seams between pieces of ground
+        PhysicsMaterial slippery = new PhysicsMaterial("PlayerSlippery");
+        slippery.dynamicFriction = 0f;
+        slippery.staticFriction = 0f;
+        slippery.frictionCombine = PhysicsMaterialCombine.Minimum;
+        boxCollider.material = slippery;
+
+        AddRoundedFeet(slippery);
+    }
+
+    // A box sliding over ground made of many box tiles gets stopped at the seams between them
+    // (the physics engine sometimes treats the edge where two tiles meet as a wall).
+    // So the box is lifted a little and a capsule lying along X carries him instead:
+    // its round bottom glides over the seams. His feet stay at exactly the same height as before.
+    void AddRoundedFeet(PhysicsMaterial material)
+    {
+        Vector3 size = boxCollider.size;
+        Vector3 center = boxCollider.center;
+        float r = Mathf.Min(footRadius, size.y * 0.25f, size.x * 0.5f);
+        float bottom = center.y - size.y * 0.5f;
+
+        boxCollider.size = new Vector3(size.x, size.y - r, size.z);
+        boxCollider.center = new Vector3(center.x, center.y + r * 0.5f, center.z);
+
+        feet = gameObject.AddComponent<CapsuleCollider>();
+        feet.direction = 0;                 // lying along X (the running direction)
+        feet.radius = r;
+        feet.height = size.x;               // as wide as the body
+        feet.center = new Vector3(center.x, bottom + r, center.z);
+        feet.material = material;
+    }
+
+    // Box + feet together
+    Bounds BodyBounds()
+    {
+        Bounds b = boxCollider.bounds;
+        if (feet != null) b.Encapsulate(feet.bounds);
+        return b;
+    }
+
+    // While stunned (after being hit) the player cannot move or jump
+    float stunUntil;
+
+    public bool IsStunned => Time.time < stunUntil;
+
+    public void Stun(float seconds)
+    {
+        stunUntil = Time.time + seconds;
     }
 
     void Update()
     {
+        if (Time.time < stunUntil)
+            return;
+
         Move();
 
-        if (Input.GetKeyDown(KeyCode.Space) && IsGrounded())
+        if ((Input.GetKeyDown(jumpKey) || Input.GetKeyDown(jumpKeyAlt)) && CanJump())
         {
             Jump();
-        }
-
-        if (Input.GetKeyDown(KeyCode.LeftControl))
-        {
-            StartCrouch();
-        }
-
-        if (Input.GetKeyUp(KeyCode.LeftControl))
-        {
-            StopCrouch();
         }
     }
 
     void FixedUpdate()
     {
         ApplyExtraGravity();
+        StepUp();
     }
 
     void Move()
@@ -72,6 +119,9 @@ public class PlayerMovement : MonoBehaviour
         velocity.y = jumpForce;
 
         rb.linearVelocity = velocity;
+
+        lastJumpTime = Time.time;
+        OnJump?.Invoke();
     }
 
     void ApplyExtraGravity()
@@ -85,49 +135,93 @@ public class PlayerMovement : MonoBehaviour
         }
     }
 
-    void StartCrouch()
+    // Walks over small steps and bumps: if something low blocks the way but the space above it is free,
+    // he is lifted up onto it.
+    void StepUp()
     {
-        if (isCrouching)
+        if (Time.time < stunUntil)
             return;
 
-        isCrouching = true;
-
-        Vector3 scale = originalScale;
-        scale.y *= crouchHeightMultiplier;
-        transform.localScale = scale;
-
-        Vector3 colliderSize = originalColliderSize;
-        colliderSize.y *= crouchHeightMultiplier;
-        boxCollider.size = colliderSize;
-
-        Vector3 colliderCenter = originalColliderCenter;
-        colliderCenter.y -=
-            (originalColliderSize.y - colliderSize.y) / 2f;
-
-        boxCollider.center = colliderCenter;
-    }
-
-    void StopCrouch()
-    {
-        if (!isCrouching)
+        float input = Input.GetAxisRaw("Horizontal");
+        if (Mathf.Abs(input) < 0.1f || !IsGrounded())
             return;
 
-        isCrouching = false;
+        Vector3 dir = new Vector3(Mathf.Sign(input), 0f, 0f);
+        Bounds b = BodyBounds();
+        float reach = b.extents.x + stepCheckDistance;
 
-        transform.localScale = originalScale;
-        boxCollider.size = originalColliderSize;
-        boxCollider.center = originalColliderCenter;
+        // something low in front of his feet?
+        Vector3 feet = new Vector3(b.center.x, b.min.y + 0.05f, b.center.z);
+        if (!CastSolid(feet, dir, reach, out _))
+            return;
+
+        // too tall to step over (a real wall)?
+        Vector3 above = new Vector3(b.center.x, b.min.y + stepHeight + 0.05f, b.center.z);
+        if (CastSolid(above, dir, reach + 0.1f, out _))
+            return;
+
+        // how high is the top of it?
+        Vector3 top = new Vector3(b.center.x + dir.x * (reach + 0.05f), b.min.y + stepHeight + 0.05f, b.center.z);
+        if (CastSolid(top, Vector3.down, stepHeight + 0.05f, out RaycastHit down))
+        {
+            float rise = down.point.y - b.min.y;
+            if (rise > 0.01f && rise <= stepHeight)
+                rb.position += Vector3.up * (rise + 0.02f);
+        }
     }
 
-    bool IsGrounded()
+    // nearest level geometry hit (ignores himself, triggers and enemies)
+    bool CastSolid(Vector3 origin, Vector3 direction, float distance, out RaycastHit result)
     {
-        float distance =
-            boxCollider.bounds.extents.y + groundCheckDistance;
+        result = default;
+        float best = float.MaxValue;
+        bool found = false;
 
-        return Physics.Raycast(
-            transform.position,
-            Vector3.down,
-            distance
+        foreach (RaycastHit h in Physics.RaycastAll(origin, direction, distance, groundMask, QueryTriggerInteraction.Ignore))
+        {
+            if (h.transform == transform || h.transform.IsChildOf(transform)) continue;
+            if (h.collider.GetComponentInParent<EnemyHealth>() != null) continue;
+
+            if (h.distance < best)
+            {
+                best = h.distance;
+                result = h;
+                found = true;
+            }
+        }
+
+        return found;
+    }
+
+    bool CanJump()
+    {
+        return Time.time - lastJumpTime > jumpCooldown && IsGrounded();
+    }
+
+    public bool IsGrounded()
+    {
+        // Still going up fast = in the air, even if we are close to the floor
+        if (rb.linearVelocity.y > 0.1f)
+            return false;
+
+        Bounds b = BodyBounds();
+        Vector3 center = new Vector3(b.center.x, b.min.y - groundCheckDistance * 0.5f, b.center.z);
+        Vector3 halfExtents = new Vector3(b.extents.x * 0.9f, groundCheckDistance * 0.5f, b.extents.z * 0.9f);
+
+        Collider[] hits = Physics.OverlapBox(
+            center, halfExtents, Quaternion.identity,
+            groundMask, QueryTriggerInteraction.Ignore
         );
+
+        foreach (Collider hit in hits)
+        {
+            // Ignore ourselves and anything on the Towelman model
+            if (hit.transform == transform || hit.transform.IsChildOf(transform))
+                continue;
+
+            return true;
+        }
+
+        return false;
     }
 }

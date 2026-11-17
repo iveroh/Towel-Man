@@ -1,44 +1,48 @@
-# TPD4168 Game Design
+<p align="center">
+  <img src="Assets/UI/title_towelman_wide.png" alt="Towel Man" width="640">
+</p>
 
-A 3D platformer prototype built with Unity. The project includes a city-themed tutorial level with moving traffic and obstacles, a platforming sandbox, and a simple main menu.
+<p align="center"><b>You forgot the time. You are still in a towel. The office is across town. ⏰</b></p>
 
-## Requirements
+---
 
-- Unity **6000.6.2f1** (Unity 6)
-- Unity Hub
+## 🧖 What is this?
 
-Unity will install the project's packages when you open it. The project uses the Universal Render Pipeline (URP).
+Towel Man is a side-scrolling platformer about one man, one towel and one very tight schedule. Sprint out of the locker room, get through the city and make it to the office before the clock runs out.
 
-## Open and run
+Trousers are optional. Punctuality is not.
 
-1. Clone or download this repository.
-2. In Unity Hub, choose **Add > Add project from disk** and select the project folder.
-3. Open it with Unity 6000.6.2f1.
-4. In the Unity Editor, open `Assets/Scenes/TutorialScene.unity` and press **Play**.
+## 🎮 How to play
 
-To try the menu, open `Assets/Scenes/MenuScene.unity` and press **Play**. Choose **Tutorial** to load the tutorial level. The sandbox can be played by opening `Assets/Scenes/SandboxScene.unity` directly.
+| Key | Action |
+|---|---|
+| `A` / `D` or arrow keys | 🏃 Run |
+| `W` or up arrow | ⬆️ Jump |
+| `Space` | 💥 Towel whip |
 
-## Controls
+You have five hearts ❤️ and a watch ⌚ that never stops ticking. Lose all your hearts or run out of time and you're late, which is the worst thing that can happen to a man in a towel.
 
-| Action | Keyboard |
-| --- | --- |
-| Move left/right | A/D or Left/Right Arrow |
-| Jump | Space |
-| Crouch | Hold Left Ctrl |
+## 🚧 What stands in your way
 
-Some obstacles restart the current scene when touched.
+- 🚶 **Pedestrians** who have never once walked in a straight line
+- 👵 **The old lady**, who has seen enough and will tell you so
+- 🚴 **Bike guy**, who believes the pavement is his
+- 🚌 **Buses**, which do not brake for towels (but do honk)
 
-## Scenes
+Most problems can be solved with a well-timed towel whip. Buses can not.
 
-| Scene | Purpose |
-| --- | --- |
-| `MenuScene` | Main menu, tutorial navigation, and settings |
-| `TutorialScene` | City-themed platforming level with moving buses and obstacles |
-| `SandboxScene` | Platforming test area |
-| `SampleScene` | Default URP sample scene |
+## 🛠️ Running the project
 
-## Project notes
+1. Install **Unity 6** (the project was made with 6000.6.2f1).
+2. Clone this repository and open the folder in Unity Hub.
+3. Open `Assets/Scenes/MenuScene.unity` and press Play.
 
-- The build settings currently include `MenuScene` and `TutorialScene`; `SandboxScene` is available in the Editor but is not in the build scene list.
-- The menu's **Play** button currently targets a scene named `Level1`, which is not present in the project. Use **Tutorial** or open `TutorialScene` directly instead.
-- Gameplay input is handled by the player movement script; the included Input System actions asset is also part of the project.
+The scenes are `MenuScene`, `TutorialScene` and `Level1`.
+
+## 🏆 Credits
+
+Made for **TPD4168 Game Design** by  [@iveroh](https://www.github.com/iveroh),  [@markuswathle](https://github.com/markuswathle), and  [@andrej-52](https://www.github.com/andrej-52).
+
+- 🔊 Sound effects by Universfield
+- 🔤 Fonts: Lilita One and Fredoka (SIL Open Font License)
+- 🧺 No towels were harmed in the making of this game
